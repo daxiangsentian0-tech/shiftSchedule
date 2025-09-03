@@ -55,7 +55,12 @@
 
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.addEventListener('click', () => {
-                const selectedDates = calendar.selectedDates.map(date => date.toISOString().slice(0, 10));
+                const selectedDates = calendar.selectedDates.map(date => {
+    const y = date.getFullYear();
+    const m = ("0" + (date.getMonth() + 1)).slice(-2); // 月を2桁に
+    const d = ("0" + date.getDate()).slice(-2);      // 日を2桁に
+    return `${y}-${m}-${d}`;
+});
                 
                 if (selectedDates.length === 0) {
                     alert('日付が選択されていません。');
