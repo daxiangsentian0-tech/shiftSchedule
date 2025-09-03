@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta charset="UTF-8">
+    <title>シフト提出</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <style>
+      body { font-family: sans-serif; padding: 10px; }
+      #calendar { margin-bottom: 20px; }
+      #submitBtn {
+        display: block; width: 100%; padding: 15px;
+        background-color: #06C755; color: white;
+        border: none; border-radius: 8px; font-size: 16px; font-weight: bold;
+        cursor: pointer;
+      }
+    </style>
+</head>
+<body>
+    <h3>シフト希望日を選択してください</h3>
+    <div id="calendar"></div>
+    <button id="submitBtn">この内容で提出する</button>
+
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script>
+        const LIFF_ID = "2008021879-ZJvNrOVL";
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbwvvmpf7tjRqvzjE4QaQRYXSbmauZXDYcM0C_c_56tUJVzzhGYAUN-OrU9PKwcArDDH/exec";
+
+        window.onload = function() {
+            initializeLiff();
+        };
+
+        function initializeLiff() {
+            liff.init({
+                liffId: LIFF_ID,
+                withLoginOnExternalBrowser: true 
+            })
+            .then(() => {
+                setupCalendar();
+            })
+            .catch((err) => {
+                console.error("【エラー】LIFFの初期化に失敗しました:", err);
+                alert('LIFFの初期化に失敗しました。');
+            });
+        }
+
+        function setupCalendar() {
+            const calendar = flatpickr("#calendar", {
+                mode: "multiple",
+                inline: true,
+                dateFormat: "Y-m-d"
+            });
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.addEventListener('click', () => {
+                const selectedDates = calendar.selectedDates.map(date => date.toISOString().slice(0, 10));
+                
+                if (selectedDates.length === 0) {
+                    alert('日付が選択されていません。');
+                    return;
+                }
+
+                liff.getProfile().then(profile => {
+                    fetch(GAS_URL, {
+                        method: 'POST',
+                        mode: 'no-cors', 
+                        body: JSON.stringify({ 
+                            userId: profile.userId, 
+                            dates: selectedDates 
+                        }),
+                        headers: { 
+                            'Content-Type': 'application/json' 
+                        }
+                    })
+                    .then(() => {
+                        alert("シフトを送信しました。");
+                        liff.closeWindow();
+                    })
+                    .catch(error => {
+                        console.error("【エラー】GASへのデータ送信に失敗しました:", error);
+                        alert("エラー：サーバーへのデータ送信に失敗しました。");
+                    });
+                }).catch(error => {
+                    console.error("【エラー】LIFFプロフィールの取得に失敗しました:", error);
+                    alert("エラー：LINEユーザー情報の取得に失敗しました。");
+                });
+            });
+        }
+    </script>
+</body>
+</html>
