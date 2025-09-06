@@ -8,90 +8,159 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <style>
+      /* 基本スタイル */
       body { font-family: sans-serif; padding: 10px; }
-      #calendar { margin-bottom: 20px; }
       #submitBtn {
-        display: block; width: 100%; padding: 15px;
+        display: block; width: 100%; padding: 15px; margin-top: 20px;
         background-color: #06C755; color: white;
         border: none; border-radius: 8px; font-size: 16px; font-weight: bold;
         cursor: pointer;
       }
+      /* 選択済みシフトリスト */
+      #selected-shifts { list-style: none; padding: 0; }
+      #selected-shifts li {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 8px; border-bottom: 1px solid #eee;
+      }
+      #selected-shifts button {
+        background: #ff4d4d; color: white; border: none; border-radius: 4px; cursor: pointer;
+      }
+      /* モーダルウィンドウ */
+      .modal {
+        display: none; position: fixed; z-index: 1000;
+        left: 0; top: 0; width: 100%; height: 100%;
+        background-color: rgba(0,0,0,0.5);
+        justify-content: center; align-items: center;
+      }
+      .modal-content {
+        background: white; padding: 20px; border-radius: 8px; text-align: center;
+      }
+      .modal-content button {
+        display: block; width: 100%; padding: 12px; margin-top: 10px;
+        border: 1px solid #ccc; border-radius: 8px; background: #f0f0f0;
+      }
     </style>
 </head>
 <body>
-  <h3>シフト提出（バージョン2）</h3>
+    <h3>シフト希望日を選択してください</h3>
     <div id="calendar"></div>
+
+    <h4>提出するシフト</h4>
+    <ul id="selected-shifts"></ul>
     <button id="submitBtn">この内容で提出する</button>
+
+    <div id="shift-modal" class="modal">
+        <div class="modal-content">
+            <h4 id="modal-date"></h4>
+            <button data-shift="午前">午前</button>
+            <button data-shift="午後">午後</button>
+            <button data-shift="1日">1日</button>
+            <button data-shift="cancel" style="background:#ddd;">キャンセル</button>
+        </div>
+    </div>
 
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script>
-        const LIFF_ID = "2008021879-ZJvNrOVL";
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbwvvmpf7tjRqvzjE4QaQRYXSbmauZXDYcM0C_c_56tUJVzzhGYAUN-OrU9PKwcArDDH/exec";
+        const LIFF_ID = "ここにあなたのLIFF IDを入力";
+        const GAS_URL = "ここにあなたのGASウェブアプリのURLを入力";
+
+        // 選択されたシフトを保存するオブジェクト
+        let shifts = {}; //例: { "2025-09-04": "午前", "2025-09-05": "1日" }
 
         window.onload = function() {
             initializeLiff();
         };
 
         function initializeLiff() {
+            // (この関数の中身は変更なし)
             liff.init({
                 liffId: LIFF_ID,
-                withLoginOnExternalBrowser: true 
+                withLoginOnExternalBrowser: true
             })
-            .then(() => {
-                setupCalendar();
-            })
-            .catch((err) => {
-                console.error("【エラー】LIFFの初期化に失敗しました:", err);
-                alert('LIFFの初期化に失敗しました。');
-            });
+            .then(setupCalendar)
+            .catch(err => console.error("LIFF Init Error:", err));
         }
 
         function setupCalendar() {
-            const calendar = flatpickr("#calendar", {
-                mode: "multiple",
+            const modal = document.getElementById('shift-modal');
+
+            // カレンダーの設定
+            flatpickr("#calendar", {
                 inline: true,
-                dateFormat: "Y-m-d"
+                dateFormat: "Y-m-d",
+                // 日付がクリックされた時の処理
+                onDayCreate: function(dObj, dStr, fp, dayElem) {
+                    const date = dayElem.getAttribute('aria-label');
+                    if (shifts[date]) {
+                        dayElem.classList.add('selected-day');
+                        dayElem.innerHTML += `<span class="shift-label">${shifts[date]}</span>`;
+                    }
+                },
+                onClick: function(selectedDates, dateStr, instance) {
+                    modal.style.display = 'flex';
+                    document.getElementById('modal-date').textContent = dateStr;
+                }
             });
 
-            const submitBtn = document.getElementById('submitBtn');
-            submitBtn.addEventListener('click', () => {
-                const selectedDates = calendar.selectedDates.map(date => {
-    const y = date.getFullYear();
-    const m = ("0" + (date.getMonth() + 1)).slice(-2); // 月を2桁に
-    const d = ("0" + date.getDate()).slice(-2);      // 日を2桁に
-    return `${y}-${m}-${d}`;
-});
+            // モーダル内のボタンの処理
+            modal.addEventListener('click', function(e) {
+                if (e.target.tagName !== 'BUTTON') return;
                 
-                if (selectedDates.length === 0) {
-                    alert('日付が選択されていません。');
+                const shift = e.target.dataset.shift;
+                const date = document.getElementById('modal-date').textContent;
+
+                if (shift && shift !== 'cancel') {
+                    shifts[date] = shift; // シフトを保存
+                }
+                modal.style.display = 'none';
+                updateShiftList(); // 選択リストを更新
+            });
+
+            // 提出ボタンの処理
+            document.getElementById('submitBtn').addEventListener('click', function() {
+                if (Object.keys(shifts).length === 0) {
+                    alert('シフトが選択されていません。');
                     return;
                 }
 
                 liff.getProfile().then(profile => {
                     fetch(GAS_URL, {
                         method: 'POST',
-                        mode: 'no-cors', 
-                        body: JSON.stringify({ 
-                            userId: profile.userId, 
-                            dates: selectedDates 
-                        }),
-                        headers: { 
-                            'Content-Type': 'application/json' 
-                        }
+                        mode: 'no-cors',
+                        body: JSON.stringify({ userId: profile.userId, shifts: shifts }),
+                        headers: { 'Content-Type': 'application/json' }
                     })
                     .then(() => {
                         alert("シフトを送信しました。");
                         liff.closeWindow();
                     })
-                    .catch(error => {
-                        console.error("【エラー】GASへのデータ送信に失敗しました:", error);
-                        alert("エラー：サーバーへのデータ送信に失敗しました。");
-                    });
-                }).catch(error => {
-                    console.error("【エラー】LIFFプロフィールの取得に失敗しました:", error);
-                    alert("エラー：LINEユーザー情報の取得に失敗しました。");
+                    .catch(err => alert("エラー：データ送信に失敗しました。"));
                 });
             });
+
+            updateShiftList();
+        }
+
+        // 提出シフト一覧を更新する関数
+        function updateShiftList() {
+            const list = document.getElementById('selected-shifts');
+            list.innerHTML = ''; // いったん空にする
+
+            // shiftsオブジェクトからリストを生成
+            for (const date in shifts) {
+                const li = document.createElement('li');
+                li.textContent = `${date} : ${shifts[date]}`;
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = '削除';
+                deleteBtn.onclick = function() {
+                    delete shifts[date]; // シフトを削除
+                    updateShiftList();   // リストを再描画
+                };
+                li.appendChild(deleteBtn);
+                list.appendChild(li);
+            }
+            // カレンダーも再描画
+            flatpickr("#calendar").redraw();
         }
     </script>
 </body>
